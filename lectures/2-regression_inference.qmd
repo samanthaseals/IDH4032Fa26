@@ -1,0 +1,565 @@
+---
+title: "Regression Analysis<br>Basic Inference"
+format:
+  revealjs:
+    css: style_lecture_purple.css
+    html-math-method: mathjax
+    slide-number: true
+    transition: fade
+    background-transition: fade
+    highlight-style: pygments
+    width: 1200
+    height: 800
+    margin: 0.1
+    min-scale: 0.5
+    max-scale: 2.0
+execute:
+  echo: true
+  message: false
+  warning: false
+  error: true
+---
+
+## Introduction
+
+```{r, include=FALSE}
+# Setup: Load libraries and fit all models upfront
+library(tidyverse)
+library(broom)
+
+set.seed(42)
+
+chaos_data <- tibble(
+  id = 1:200,
+  sleep_hours = pmin(10, pmax(0, round(rnorm(200, mean = 6.5, sd = 1.5)))),
+  coffee_cups = pmax(0, round(rnorm(200, mean = 2.8, sd = 1.2))),
+  tiktok_hours = pmin(10, pmax(0, round(rnorm(200, mean = 3.2, sd = 2.1)))),
+  distance_campus_miles = pmax(0, round(rnorm(200, mean = 5, sd = 4), 1)),
+  group_chats = pmin(10, pmax(0, round(rnorm(200, mean = 2, sd = 2)))),
+  dining_hall = sample(c("North", "South", "West"), 200, replace = TRUE),
+  music_genre = sample(c("K-pop", "Hyperpop"), 200, replace = TRUE),
+  major_type = sample(c("STEM", "Non-STEM"), 200, replace = TRUE),
+  pet_owner = sample(c("Yes", "No"), 200, replace = TRUE),
+  touches_grass = sample(c("Never", "Sometimes", "Regular"), 200, replace = TRUE),
+  class_year = sample(c("Fr", "So", "Ju", "Se"), 200, replace = TRUE)
+) %>%
+  mutate(
+    music_hyperpop = ifelse(music_genre == "Hyperpop", 1, 0),
+    major_stem = ifelse(major_type == "STEM", 1, 0),
+    pet_yes = ifelse(pet_owner == "Yes", 1, 0),
+    grass_never = ifelse(touches_grass == "Never", 1, 0),
+    grass_regular = ifelse(touches_grass == "Regular", 1, 0),
+    class_soph = ifelse(class_year == "Soph", 1, 0),
+    class_jun = ifelse(class_year == "Jun", 1, 0),
+    class_sen = ifelse(class_year == "Sen", 1, 0),
+    chaos_score = 50 + (-2.5 * sleep_hours) + (3.2 * coffee_cups) +
+                  (1.8 * tiktok_hours) + (0.8 * distance_campus_miles) +
+                  (0.3 * group_chats) + (5 * music_hyperpop) + (-3 * major_stem) +
+                  (8 * pet_yes) + (6 * grass_never) +
+                  (2 * (dining_hall == "South")) + (-1 * (dining_hall == "West")) +
+                  (2 * class_soph) + (4 * class_jun) + (6 * class_sen) +
+                  (1.5 * sleep_hours * coffee_cups) + (0.9 * tiktok_hours * pet_yes) +
+                  (-0.5 * sleep_hours * major_stem) + rnorm(200, mean = 0, sd = 8)
+  )
+
+# Fit all models now
+model_full <- glm(chaos_score ~ sleep_hours + coffee_cups + tiktok_hours +
+                  distance_campus_miles + group_chats + music_hyperpop +
+                  major_stem + pet_yes + grass_never + grass_regular,
+                  family = gaussian(link = "identity"), data = chaos_data)
+```
+
+- Last week:
+
+    - Regression estimation
+    - Interpretations 
+    
+- Today: 
+
+    - Making inference using regression models
+    
+- Wednesday: 
+
+    - Other predictor types
+    
+- Next week: 
+
+    - Leaving the normal distribution
+
+## Model Construction
+
+- Recall our campus chaos dataset,
+
+```{r}
+head(chaos_data)
+```
+
+## Model Construction
+
+- Today we will work with the basic model
+
+$$\text{chaos} = \beta_0 + \beta_1 \text{ sleep} + \beta_2 \text{ coffee} + \beta_3 \text{ tiktok} + \beta_4 \text{ distance}$$
+
+```{r}
+m_full <- glm(chaos_score ~ sleep_hours + 
+                            coffee_cups + 
+                            tiktok_hours + 
+                            distance_campus_miles,
+              data = chaos_data)
+```
+
+## Model Construction
+
+- Examining results, 
+
+```{r}
+coefficients(m_full)
+```
+
+$$\text{chaos} = 29.84 + 1.99 \text{ sleep} + 12.76 \text{ coffee} + 2.54 \text{ tiktok} + 0.23 \text{ distance}$$
+
+## Questions we can ask
+
+- Does this regression line significantly predict chaos score?
+
+    - Omnibus test for a significant line
+
+- Do individual predictors predict chaos score?
+
+    - Individual tests for predictors
+
+## Reminder of Statistical Inference
+
+- **hypothesis testing** a statistical procedure that allows us to make inferences about population parameters based on sample data.
+
+- General steps:
+
+    1. Make a statement about the nature of the population. 
+    
+    2. Collect evidence to test the statement.
+    
+    3. Analyze the data to determine the plausibility of the statement.
+    
+## Hypotheses
+
+- **hypothesis** a statement regarding the population parameter.
+
+- We will be stating two hypotheses: the null and the alternative.
+
+    - **$H_0$: null hypothesis** a mathematical statement about the population parameter; this hypothesis is assumed *true* until evidence indicates otherwise.
+    
+    - **$H_1$: alternative hypothesis** a statement about the population parameter that contradicts the null hypothesis; this is also called the research hypothesis.
+    
+- Note! $H_0 + H_1$ should cover the real line, $\mathbb{R}$.
+
+    - Some textbooks teach that "$=$" is *always* used in $H_0$.
+    
+## Test Statistics
+
+- After stating our hypotheses, we will construct an appropriate test statistic. 
+
+    - A test statisic is a measure of the distance from what you observed to what you are assuming to he true.
+
+- The choice of test statistic depends on:
+
+    1. The hypotheses being tested.
+    
+    2. Assumptions made about the data.
+
+## Test Statistics
+
+- The value of the test statistic depends on the sample data. 
+
+    - **If we were to draw a different sample, our calculations would result in a different value for the test statistic.**
+
+- We use the test statistic on our way to drawing conclusions about the hypotheses.
+
+## *p*-Value
+
+- ***p*-value** the probability of observing our test statistic or one more extreme.
+
+    - More extreme?
+        
+        - If the alternative hypothesis is right-tailed, we will consider the right tail of the distribution.
+        
+        - If the alternative hypothesis is left-tailed, we will consider the left tail of the distribution.
+        
+        - If the alternative hypothesis is two-tailed, we will consider both tails of the distribution.
+
+- We use the *p*-value to determine if we reject the null (believe the alternative) or fail to reject the null (do not believe the alternative).
+
+## *p*-Value
+
+- ***p*-value** the probability of observing our test statistic or one more extreme.
+
+```{=html}
+<style>
+/* Sizes use the slide's own coordinate system, not the browser viewport. */
+#pval-widget, #pval-widget * { box-sizing: border-box; }
+#pval-widget {
+  width: 100%;
+  margin: 0 auto;
+  font-size: 22px;
+  line-height: 1.25;
+}
+#pval-widget .pval-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 30%) minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+#pval-widget .pval-controls,
+#pval-widget .pval-plot {
+  min-width: 0;
+  background: #f5f4f0;
+  border-radius: 10px;
+  padding: 16px;
+}
+#pval-widget .pval-heading {
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+#pval-widget .pval-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: inherit;
+}
+#pval-widget input[type="radio"] {
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: #005EA6;
+}
+#pval-widget .pval-statistic {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 18px;
+}
+#pval-widget #pvalZVal { font-weight: 700; font-variant-numeric: tabular-nums; }
+#pval-widget #pvalZ {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 12px 0 0;
+  accent-color: #005EA6;
+}
+#pval-widget .pval-plot {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+#pval-widget #pvalSvg {
+  display: block;
+  width: 100%;
+  height: 220px;
+  margin: 0;
+}
+#pval-widget .pval-result {
+  margin-top: 8px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 28px;
+  color: #005EA6;
+  font-variant-numeric: tabular-nums;
+}
+</style>
+<div id="pval-widget">
+  <div class="pval-layout">
+    <div class="pval-controls">
+      <div class="pval-heading">Alternative hypothesis:</div>
+      <label class="pval-option"><input type="radio" name="pvalTail" value="upper"> Upper-tailed</label>
+      <label class="pval-option"><input type="radio" name="pvalTail" value="lower"> Lower-tailed</label>
+      <label class="pval-option"><input type="radio" name="pvalTail" value="two" checked> Two-tailed</label>
+      <div class="pval-statistic">
+        <label for="pvalZ">Test statistic</label>
+        <span id="pvalZVal">1.50</span>
+      </div>
+      <input id="pvalZ" type="range" min="-4" max="4" step="0.01" value="1.5">
+    </div>
+    <div class="pval-plot">
+      <svg id="pvalSvg" viewBox="0 0 700 260" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Standard normal distribution with shaded p-value area">
+        <line x1="40" y1="220" x2="660" y2="220" stroke="#888" stroke-width="1"/>
+        <path id="pvalShadeLeft" fill="#7DB9D9" fill-opacity="0.7" d=""/>
+        <path id="pvalShadeRight" fill="#7DB9D9" fill-opacity="0.7" d=""/>
+        <path id="pvalCurve" fill="none" stroke="#005EA6" stroke-width="2.5" d=""/>
+        <line id="pvalRule" x1="0" y1="20" x2="0" y2="220" stroke="#222" stroke-width="1.5" stroke-dasharray="4,3"/>
+      </svg>
+      <div class="pval-result" aria-live="polite">p-value = <span id="pvalOut">0.1336</span></div>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  function erf(x) {
+    const sign = x < 0 ? -1 : 1;
+    x = Math.abs(x);
+    const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741,
+          a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+    const t = 1 / (1 + p * x);
+    const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+    return sign * y;
+  }
+  function normPdf(x) { return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI); }
+  function normCdf(x) { return 0.5 * (1 + erf(x / Math.sqrt(2))); }
+  const xMin = -4, xMax = 4, yMin = 0, yMax = 0.45;
+  const pxLeft = 40, pxRight = 660, pyTop = 20, pyBottom = 220;
+  function xToPx(x) { return pxLeft + (x - xMin) / (xMax - xMin) * (pxRight - pxLeft); }
+  function yToPx(y) { return pyBottom - (y - yMin) / (yMax - yMin) * (pyBottom - pyTop); }
+  function curvePoints(x0, x1, step) {
+    const pts = [];
+    for (let x = x0; x <= x1 + 1e-9; x += step) {
+      pts.push([xToPx(x), yToPx(normPdf(x))]);
+    }
+    return pts;
+  }
+  function areaPath(x0, x1) {
+    const pts = curvePoints(x0, x1, 0.05);
+    if (pts.length === 0) return "";
+    let d = `M ${pts[0][0]},${yToPx(0)} `;
+    pts.forEach(p => { d += `L ${p[0]},${p[1]} `; });
+    d += `L ${pts[pts.length - 1][0]},${yToPx(0)} Z`;
+    return d;
+  }
+  const curveEl = document.getElementById('pvalCurve');
+  const shadeLeftEl = document.getElementById('pvalShadeLeft');
+  const shadeRightEl = document.getElementById('pvalShadeRight');
+  const ruleEl = document.getElementById('pvalRule');
+  const zSlider = document.getElementById('pvalZ');
+  const zValEl = document.getElementById('pvalZVal');
+  const pvalOutEl = document.getElementById('pvalOut');
+  // Draw the static curve once
+  const fullPts = curvePoints(xMin, xMax, 0.05);
+  curveEl.setAttribute('d', 'M ' + fullPts.map(p => p.join(',')).join(' L '));
+  function getTail() {
+    const checked = document.querySelector('input[name="pvalTail"]:checked');
+    return checked ? checked.value : 'two';
+  }
+  function update() {
+    const z = parseFloat(zSlider.value);
+    zValEl.textContent = z.toFixed(2);
+    const tail = getTail();
+    let pvalue;
+    shadeLeftEl.setAttribute('d', '');
+    shadeRightEl.setAttribute('d', '');
+    if (tail === 'upper') {
+      pvalue = 1 - normCdf(z);
+      shadeRightEl.setAttribute('d', areaPath(z, xMax));
+    } else if (tail === 'lower') {
+      pvalue = normCdf(z);
+      shadeLeftEl.setAttribute('d', areaPath(xMin, z));
+    } else {
+      pvalue = 2 * (1 - normCdf(Math.abs(z)));
+      shadeLeftEl.setAttribute('d', areaPath(xMin, -Math.abs(z)));
+      shadeRightEl.setAttribute('d', areaPath(Math.abs(z), xMax));
+    }
+    const zx = xToPx(z);
+    ruleEl.setAttribute('x1', zx);
+    ruleEl.setAttribute('x2', zx);
+    pvalOutEl.textContent = pvalue.toFixed(4);
+  }
+  zSlider.addEventListener('input', update);
+  document.querySelectorAll('input[name="pvalTail"]').forEach(function(r) {
+    r.addEventListener('change', update);
+  });
+  update();
+})();
+</script>
+```
+
+## *p*-Values
+
+- Mathematically, we are asking
+
+    - Right-tailed test: $P[\text{distribution} \ge \text{test statistic}]$
+    
+    - Left-tailed test: $P[\text{distribution} \le \text{test statistic}]$
+    
+    - Two-tailed test: $P[\text{distribution} \ne \text{test statistic}]$
+
+## Rejection Regions
+
+- We use rejection regions to determine if we reject the null or fail to reject the null.
+
+- Classical approach: critical values and statistical tables. 
+
+- Modern approach: $p$-values.
+
+    - ***p*-value** the probability of observing our test statistic or one more extreme.
+
+- All rejection regions will take the same form:
+
+<center><span style="font-size:2em;">Reject $H_0$ if $p < \alpha$.</span></center>
+
+## Errors in Hypothesis Testing
+
+- Wait, what is $\alpha$? 
+
+    - $\alpha$ is the **significance level** of the test. 
+
+- A Type I error ($\alpha$) means that we reject the null when we should not. 
+
+    - $\alpha = P[\text{reject } H_0 \text{ when } H_0 \text{ is true}]$
+
+- A Type II error ($\beta$) means that we fail to reject the null when we should not. 
+
+    - $\beta = P[\text{fail to reject } H_0 \text{ when } H_1 \text{ is true}]$
+    
+- We should choose $\alpha$ based on the level of error we are willing to withstand.
+
+    - The $\alpha$ that is commonly used is $\alpha=0.05$.
+    
+    - Sometimes, smaller $\alpha$ is used. e.g., clinical trial $\to$  $\alpha=0.01$.
+
+## Drawing a Conclusion 
+
+- We draw a conclusion by following the instructions of our rejection region.
+
+- If $p < \alpha$, we **reject** the null hypothesis.
+    - There **is** sufficient evidence to suggest that the alternative is true.
+
+- If $p \ge \alpha$, we **fail to reject** the null hypothesis.
+    - There **is not** sufficient evidence to suggest that the alternative is true.
+
+- Note the language -- "fail to reject" is not the same as "accept."    
+
+<br><center><span style="font-size:2em;">We **never** "accept" $H_0$.</span></center>    
+
+## Interpretation of Results
+
+- We will always report our results in the context of the problem.
+
+- Examples:
+
+    - There is sufficient evidence to suggest that the average daily spending of guests at Disney's Hollywood Studios is greater than $50.
+    
+    - There is not sufficient evidence to suggest that the proportion of guests who purchase Lightning Lane passes differs between annual passholders and single-day ticket holders.
+
+## Putting it Together
+
+- For class purposes, you will be reporting all hypothesis test pieces.
+
+    - Hypotheses
+    - Test Statistic and $p$-Value
+    - Rejection Region
+    - Conclusion and Interpretation
+
+- For poster purposes, we will reduce the amount of information shown about each hypothesis test. 
+
+    - We will draw conclusions and support with a *p*-value.
+    
+    - e.g., There is sufficient evidence to suggest that the average daily spending of guests at Disney's Hollywood Studios is greater than $50 ($p = 0.012$).
+
+##  Significant Regression Line
+
+- We can use the likelihood ratio test to test for a "significant regression" line. 
+
+    - A significant regression line means that there is a non-zero slope among all slopes... why do we care?
+
+- **Hypotheses**
+
+    - $H_0: \ \beta_1 = ... = \beta_k = 0$ 
+    - $H_1:$ at least one is different
+
+- **Test Statistic**
+
+    - $F_0$ 
+    
+## Significant Regression Line (R)
+
+- We will use the `anova()` function to test for a significant model.
+
+```{r}
+#| eval: false
+# full model with all predictors
+full <- glm(y ~ x_1 + x_2 + ... + x_k, data = dataset_name)
+# intercept-only model
+reduced <- glm(y ~ 1, data = dataset_name)
+# does this particular predictor set explain the outcome?
+anova(reduced, full, test = "Chisq")
+```
+
+## Significant Regression Line
+
+- In our example model,
+
+```{r}
+m_full <- glm(chaos_score ~ sleep_hours + coffee_cups + tiktok_hours + distance_campus_miles, data = chaos_data)
+m_reduced <- glm(chaos_score ~ 1, data = chaos_data)
+anova(m_reduced, m_full)
+```
+
+## Significant Regression Line
+
+- **Hypotheses**
+
+    - $H_0: \beta_1 = \beta_2 = \beta_3 = \beta_4 = 0$ 
+    - $H_1:$ at least one is different
+
+- **Test Statistic and *p*-Value**
+
+    - $F_0 = 137.46$
+    - $p < 0.001$
+    
+- **Rejection Region**
+
+    - Reject $H_0$ if $p < \alpha$; $\alpha = 0.05$
+    
+- **Conclusion and Interpretation **
+
+    - Reject $H_0$. There is sufficient evidence to suggest that at least one of the slopes is non-zero.
+
+##  Individual Predictors
+
+- We can use the $t$-test to test for "significant predictors"
+
+    - A significant predictor means that there is a non-zero slope between the outcome and this specific $x_i$. Why do we care?
+    
+- **Hypotheses**
+
+    - $H_0: \ \beta_i = 0$ 
+    - $H_1: \ \beta_i \ne 0$
+
+- **Test Statistic**
+
+$$t_0 = \frac{\hat{\beta}_i}{\text{SE}_{\beta_i}} \sim t_1$$
+
+## Individual Predictors (`R`)
+
+- We turn to `tidy()` for output,
+
+```{r}
+#| eval: false
+model_name |> tidy(conf.int = TRUE)
+```
+
+- We will see results for *all predictors* in the model. 
+
+## Individual Predictors
+
+- In our example,
+
+```{r}
+m_full |> tidy()
+```
+
+## Wrap Up
+
+- Now that we know the basics of hypothesis testing in regression, we will expand our knowledge over the next few lectures:
+
+    - Types of predictors
+    - Visualization of the model
+    - How to handle non-normal outcomes
+    
+## You Try!
+
+- Fresh data on GitHub (pulled 10 am Mon 10/05)
+
+```{r}
+operation_data <- read_csv("https://raw.githubusercontent.com/samanthaseals/IDH4032Fa26/refs/heads/main/analysis_files/data/combined_raw.csv")
+```
+
+- Please construct the basic models corresponding to the research questions submitted previously. 
+
+- Begin exploring -- is it a significant model? are there significant predictors? 

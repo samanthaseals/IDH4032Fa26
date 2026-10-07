@@ -1,0 +1,267 @@
+---
+title: "Introduction to Regression"
+subtitle: "Predicting Campus Chaos"
+format:
+  revealjs:
+    css: style_lecture_purple.css
+    html-math-method: mathjax
+    slide-number: true
+    transition: fade
+    background-transition: fade
+    highlight-style: pygments
+    width: 1200
+    height: 800
+    margin: 0.1
+    min-scale: 0.5
+    max-scale: 2.0
+execute:
+  echo: true
+  message: false
+  warning: false
+  error: true
+---
+
+
+```{r, include=FALSE}
+# Setup: Load libraries and fit all models upfront
+library(tidyverse)
+library(broom)
+
+set.seed(42)
+
+chaos_data <- tibble(
+  id = 1:200,
+  sleep_hours = rnorm(200, mean = 6.5, sd = 1.5),
+  coffee_cups = rnorm(200, mean = 2.8, sd = 1.2),
+  tiktok_hours = rnorm(200, mean = 3.2, sd = 2.1),
+  distance_campus_miles = rnorm(200, mean = 5, sd = 4),
+  group_chats = rnorm(200, mean = 12, sd = 5),
+  dining_hall = sample(c("North", "South", "West"), 200, replace = TRUE),
+  music_genre = sample(c("K-pop", "Hyperpop"), 200, replace = TRUE),
+  major_type = sample(c("STEM", "Non-STEM"), 200, replace = TRUE),
+  pet_owner = sample(c("Yes", "No"), 200, replace = TRUE),
+  touches_grass = sample(c("Never", "Sometimes", "Regular"), 200, replace = TRUE),
+  class_year = sample(c("Fr", "So", "Ju", "Se"), 200, replace = TRUE)
+) %>%
+  mutate(
+    music_hyperpop = ifelse(music_genre == "Hyperpop", 1, 0),
+    major_stem = ifelse(major_type == "STEM", 1, 0),
+    pet_yes = ifelse(pet_owner == "Yes", 1, 0),
+    grass_never = ifelse(touches_grass == "Never", 1, 0),
+    grass_regular = ifelse(touches_grass == "Regular", 1, 0),
+    class_soph = ifelse(class_year == "Soph", 1, 0),
+    class_jun = ifelse(class_year == "Jun", 1, 0),
+    class_sen = ifelse(class_year == "Sen", 1, 0),
+    chaos_score = 50 + (-2.5 * sleep_hours) + (3.2 * coffee_cups) +
+                  (1.8 * tiktok_hours) + (0.8 * distance_campus_miles) +
+                  (0.3 * group_chats) + (5 * music_hyperpop) + (-3 * major_stem) +
+                  (8 * pet_yes) + (6 * grass_never) +
+                  (2 * (dining_hall == "South")) + (-1 * (dining_hall == "West")) +
+                  (2 * class_soph) + (4 * class_jun) + (6 * class_sen) +
+                  (1.5 * sleep_hours * coffee_cups) + (0.9 * tiktok_hours * pet_yes) +
+                  (-0.5 * sleep_hours * major_stem) + rnorm(200, mean = 0, sd = 8)
+  )
+
+# Fit all models now
+model_sleep <- glm(chaos_score ~ sleep_hours,
+                   family = gaussian(link = "identity"), data = chaos_data)
+
+model_sleep_coffee <- glm(chaos_score ~ sleep_hours + coffee_cups,
+                          family = gaussian(link = "identity"), data = chaos_data)
+
+model_music <- glm(chaos_score ~ music_hyperpop,
+                   family = gaussian(link = "identity"), data = chaos_data)
+
+model_grass <- glm(chaos_score ~ grass_never + grass_regular,
+                   family = gaussian(link = "identity"), data = chaos_data)
+
+model_full <- glm(chaos_score ~ sleep_hours + coffee_cups + tiktok_hours +
+                  distance_campus_miles + group_chats + music_hyperpop +
+                  major_stem + pet_yes + grass_never + grass_regular,
+                  family = gaussian(link = "identity"), data = chaos_data)
+```
+
+# Regression Fundamentals
+
+## What is Regression?
+
+- We are often interested in how two variables are related.
+
+- **Regression analysis** examines this relationship, where one variable predicts or explains another.
+
+- Simple linear regression:
+
+$$
+\hat{y} = \hat{\beta}_0 + \hat{\beta}_1 x_1
+$$
+
+- Multiple regression:
+
+$$
+\hat{y} = \hat{\beta}_0 + \hat{\beta}_1 x_1 + \hat{\beta}_2 ... + \hat{\beta}_kx_k
+$$
+
+## Key Terms
+
+- **Response variable** (outcome variable): The variable we are interested in predicting or modeling
+
+    - This is our $y$ 
+
+- **Explanatory variable** (predictor variable): The variable explaining or predicting the outcome
+
+    - This is our $x$
+
+- In our modeling, we will model a single outcome as a function of predictor(s) variables.
+
+## Campus Chaos Score
+
+- We will model a student's **Campus Chaos Score**: a composite measure of how much delightful chaos they introduce to campus life.
+
+::: {.tab-callout .tab-blue}
+::: {.tab-label}
+Response Variable
+:::
+
+**Campus Chaos Score**: a composite measure of how much delightful chaos a student introduces to campus life (scale: 0-100)
+:::
+
+## Campus Chaos Score
+
+- We will model a student's **Campus Chaos Score**: a composite measure of how much delightful chaos they introduce to campus life.
+
+::: {.tab-callout .tab-green}
+::: {.tab-label}
+Explanatory Variables
+:::
+
+**Continuous predictors:**
+
+- Sleep per night (hrs)
+- Coffee per day (cups)
+- TikTok scrolling per day (hr)
+- Distance from campus (miles)
+:::
+
+## Campus Chaos Score
+
+- We will model a student's **Campus Chaos Score**: a composite measure of how much delightful chaos they introduce to campus life.
+
+::: {.tab-callout .tab-green}
+::: {.tab-label}
+Explanatory Variables
+:::
+
+**Categorical predictors:**
+
+- Student classification (Fr, So, Ju, Se)
+- Major type (STEM vs Non-STEM)
+- Music genre (K-pop vs Hyperpop)
+- Pet ownership (Yes/No)
+:::
+
+# Ordinary Least Squares (OLS)
+
+## The Regression Line
+
+- The **OLS regression line** minimizes the sum of squared distances between observed and predicted values.
+
+$$\hat{y} = \hat{\beta}_0 + \hat{\beta}_1 x$$
+
+- $\hat{\beta}_0$ = intercept
+- $\hat{\beta}_1$ = slope
+- $\hat{y}$ = predicted value
+
+## The Regression Line
+
+
+
+## Simple Regression: Sleep
+
+- Looking at chaos_score ~ sleep_hours,
+
+```{r}
+#| echo: false
+tidy(model_sleep) |> select(-statistic, -p.value)
+```
+
+- The fitted line: 
+
+$$\hat{y} = `r round(coef(model_sleep)[1], 2)` + `r round(coef(model_sleep)[2], 2)` x$$
+
+
+# Interpreting Coefficients
+
+## The Slope $\hat{\beta}_1$
+
+- Template for interpretations:
+
+    - For a **[k] [unit]** increase in **[x]**, we expect **[y]** to **increase/decrease** by **[k × |b₁|] [units]**.
+
+- From our model: $b_1 = `r round(coef(model_sleep)[2], 2)`$
+
+- **Interpretations:**
+
+    - For a 1-hour increase in sleep, we expect chaos to decrease by `r abs(round(coef(model_sleep)[2], 2))` points.
+
+    - For a 2-hour increase in sleep, we expect chaos to decrease by `r abs(round(2 * coef(model_sleep)[2], 2))` points.
+
+## The Intercept $\hat{\beta}_0$
+
+- Template for interpretations:
+
+    - When **[x] = 0**, we expect the mean of **[y]** to be **[$\hat{\beta}_0$]**.
+
+    - **Caveat:** Only interpret if x = 0 is meaningful!
+
+- From our model: $\hat{\beta}_0 = `r round(coef(model_sleep)[1], 2)`$
+
+- **Interpretation:**
+
+    - When sleep = 0 hours, predicted chaos = `r round(coef(model_sleep)[1], 2)` points.
+
+# Categorical Predictors
+
+## Why Categorical?
+
+- Many variables are categorical (music genre, major type, pet ownership, etc.).
+
+- For $c$ categories, we add $c-1$ dummy variables. This is called reference coding.
+
+- Example: Music genre with 2 categories (K-pop, Hyperpop)
+
+    - Include: Hyperpop = 1 if Hyperpop, 0 otherwise
+    - Exclude: K-pop (the **reference group**)
+
+- Coefficients represent differences from the reference group.
+
+## Binary Categorical: Music Genre
+
+```{r}
+#| echo: false
+tidy(model_music) |> select(-statistic, -p.value)
+```
+
+- Intercept = Average chaos for K-pop fans (reference): `r round(coef(model_music)[1], 2)` points
+
+- Hyperpop coefficient: `r round(coef(model_music)[2], 2)` points higher than K-pop fans
+
+## Three-Level Categorical: Grass Touching
+
+```{r}
+#| echo: false
+tidy(model_grass) |> select(-statistic, -p.value)
+```
+
+- **Interpretations:**
+
+    - Intercept = Average for "Sometimes" touchers: `r round(coef(model_grass)[1], 2)` points
+
+    - Never: `r round(coef(model_grass)[2], 2)` points higher than "Sometimes"
+
+    - Regular: `r round(coef(model_grass)[3], 2)` points vs "Sometimes"
+
+
+## Your Turn
+
+- Plan at least three basic models you want to examine as part of your project.
+
